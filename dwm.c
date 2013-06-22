@@ -294,6 +294,7 @@ static Monitor *mons, *selmon;
 static Window root;
 
 /* configuration, allows nested code to access above variables */
+#include "volume.h"
 #include "config.h"
  
 /* Monitor */
