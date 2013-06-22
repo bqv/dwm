@@ -2678,6 +2678,7 @@ main(int argc, char *argv[]) {
 	scan();
 	run();
 	cleanup();
+    deinit();
 	XCloseDisplay(dpy);
 	return EXIT_SUCCESS;
 }

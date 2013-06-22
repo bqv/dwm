@@ -1,7 +1,7 @@
 /* See LICENSE file for copyright and license details. */
 
 /* appearance */
-static const char font[]            = "-*-terminus-medium-r-*-*-16-*-*-*-*-*-*-*";
+static const char font[]            = "fixed";
 static const char normbordercolor[] = "#444444";
 static const char normbgcolor[]     = "#222222";
 static const char normfgcolor[]     = "#CCCCCC";
@@ -102,16 +102,15 @@ static Key keys[] = {
 	{ MODKEY,                       XK_period, focusmon,       {.i = +1 } },
 	{ MODKEY|ShiftMask,             XK_comma,  tagmon,         {.i = -1 } },
 	{ MODKEY|ShiftMask,             XK_period, tagmon,         {.i = +1 } },
-	{ ControlMask|ShiftMask,		0x1008ff13, incvolpcm,     {.i = +16 } },
-	{ ControlMask|ShiftMask,		0x1008ff11, incvolpcm,     {.i = -16 } },
-	{ ControlMask,					0x1008ff13, incvolmaster,  {.i = +1 } },
-	{ ControlMask,					0x1008ff11, incvolmaster,  {.i = -1 } },
-	{ ShiftMask,                    0x1008ff13, incvolmaster,  {.i = +2 } },
-	{ ShiftMask,                    0x1008ff11, incvolmaster,  {.i = -2 } },
-	{ 0,							0x1008ff13, incvolmaster,  {.i = +4 } },
-	{ 0,                            0x1008ff11, incvolmaster,  {.i = -4 } },
-	{ ShiftMask,					0x1008ff12, mutevol,       {.i =  0 } }, /* definite mute */
-	{ 0,                            0x1008ff12, mutevol,       {.i = -1 } }, /* toggle mute */
+	{ ControlMask,					0x1008ff13, incvol,        {.v = "Master", .i = +1 } },
+	{ ControlMask,					0x1008ff11, incvol,        {.v = "Master", .i = -1 } },
+	{ ShiftMask,                    0x1008ff13, incvol,        {.v = "Master", .i = +2 } },
+	{ ShiftMask,                    0x1008ff11, incvol,        {.v = "Master", .i = -2 } },
+	{ 0,							0x1008ff13, incvol,        {.v = "Master", .i = +4 } },
+	{ 0,                            0x1008ff11, incvol,        {.v = "Master", .i = -4 } },
+    { ShiftMask|ControlMask,        0x1008ff12, mutevol,       {.v = "Master", .i =  1 } }, /* definite unmute */
+	{ ShiftMask,					0x1008ff12, mutevol,       {.v = "Master", .i =  0 } }, /* definite mute */
+	{ 0,                            0x1008ff12, mutevol,       {.v = "Master", .i = -1 } }, /* toggle mute */
 	TAGKEYS(                        XK_1,                      0)
 	TAGKEYS(                        XK_2,                      1)
 	TAGKEYS(                        XK_3,                      2)
