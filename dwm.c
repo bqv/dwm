@@ -167,6 +167,7 @@ struct Systray {
 /* function declarations */
 static void applyrules(Client *c);
 static Bool applysizehints(Client *c, int *x, int *y, int *w, int *h, Bool interact);
+static char **args;
 static void arrange(Monitor *m);
 static void arrangemon(Monitor *m);
 static void attach(Client *c);
@@ -221,6 +222,7 @@ static void resizeclient(Client *c, int x, int y, int w, int h);
 static void resizemouse(const Arg *arg);
 static void resizerequest(XEvent *e);
 static void restack(Monitor *m);
+static void restart(const Arg *arg);
 static void run(void);
 static void scan(void);
 static Bool sendevent(Window w, Atom proto, int m, long d0, long d1, long d2, long d3, long d4);
@@ -1495,6 +1497,11 @@ restack(Monitor *m) {
 }
 
 void
+restart(const Arg *arg) {
+	execv(args[0], args);
+}
+
+void
 run(void) {
 	XEvent ev;
 	/* main event loop */
@@ -2358,6 +2365,7 @@ main(int argc, char *argv[]) {
 		fputs("warning: no locale support\n", stderr);
 	if(!(dpy = XOpenDisplay(NULL)))
 		die("dwm: cannot open display\n");
+	args = argv;
 	checkotherwm();
 	setup();
 	scan();
