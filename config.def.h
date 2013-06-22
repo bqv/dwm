@@ -8,6 +8,7 @@ static const char normfgcolor[]     = "#CCCCCC";
 static const char selbordercolor[]  = "#222222";
 static const char selbgcolor[]      = "#333333";
 static const char selfgcolor[]      = "#2299CC";
+static const unsigned int bottompx  = 16;       /* bottom pixel offset */
 static const unsigned int borderpx  = 1;        /* border pixel of windows */
 static const unsigned int snap      = 32;       /* snap pixel */
 static const unsigned int systrayspacing = 2;   /* systray spacing */
