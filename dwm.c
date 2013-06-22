@@ -129,27 +129,6 @@ typedef struct {
 	void (*arrange)(Monitor *);
 } Layout;
 
-struct Monitor {
-	char ltsymbol[16];
-	float mfact;
-	int nmaster;
-	int num;
-	int by;               /* bar geometry */
-	int mx, my, mw, mh;   /* screen size */
-	int wx, wy, ww, wh;   /* window area  */
-	unsigned int seltags;
-	unsigned int sellt;
-	unsigned int tagset[2];
-	Bool showbar;
-	Bool topbar;
-	Client *clients;
-	Client *sel;
-	Client *stack;
-	Monitor *next;
-	Window barwin;
-	const Layout *lt[2];
-};
-
 typedef struct {
 	const char *class;
 	const char *instance;
@@ -202,12 +181,12 @@ static unsigned int getsystraywidth();
 static Bool gettextprop(Window w, Atom atom, char *text, unsigned int size);
 static void grabbuttons(Client *c, Bool focused);
 static void grabkeys(void);
-static void incnmaster(const Arg *arg);
 static void keypress(XEvent *e);
 static void killclient(const Arg *arg);
 static void manage(Window w, XWindowAttributes *wa);
 static void mappingnotify(XEvent *e);
 static void maprequest(XEvent *e);
+static void mirrorlayout(const Arg *arg);
 static void monocle(Monitor *m);
 static void motionnotify(XEvent *e);
 static void movemouse(const Arg *arg);
@@ -224,6 +203,7 @@ static void resizemouse(const Arg *arg);
 static void resizerequest(XEvent *e);
 static void restack(Monitor *m);
 static void restart(const Arg *arg);
+static void rotatelayoutaxis(const Arg *arg);
 static void run(void);
 static void scan(void);
 static Bool sendevent(Window w, Atom proto, int m, long d0, long d1, long d2, long d3, long d4);
@@ -234,6 +214,7 @@ static void setfullscreen(Client *c, Bool fullscreen);
 static void setlayout(const Arg *arg);
 static void setmfact(const Arg *arg);
 static void setup(void);
+static void shiftmastersplit(const Arg *arg);
 static void showhide(Client *c);
 static void sigchld(int unused);
 static void spawn(const Arg *arg);
@@ -308,6 +289,37 @@ static Window root;
 
 /* configuration, allows nested code to access above variables */
 #include "config.h"
+ 
+/* Monitor */
+struct Monitor {
+	char ltsymbol[16];
+	float mfact;
+	double mfacts[LENGTH(tags) + 1];
+	int ltaxis[3];
+	int ltaxes[LENGTH(tags) + 1][3];
+	int num;
+	int curtag;
+	int prevtag;
+	int by;               /* bar geometry */
+	int mx, my, mw, mh;   /* screen size */
+	int wx, wy, ww, wh;   /* window area  */
+	unsigned int msplit;
+	unsigned int msplits[LENGTH(tags) + 1];
+	unsigned int seltags;
+	unsigned int sellt;
+	unsigned int tagset[2];
+	Bool showbar;
+	Bool showbars[LENGTH(tags) + 1];
+	Bool topbar;
+	Client *clients;
+	Client *sel;
+	Client *stack;
+	Monitor *next;
+	Window barwin;
+	const Layout *lt[2];
+	const Layout *lts[LENGTH(tags) + 1];
+};
+
 
 /* compile-time check if all tags fit into an unsigned int bit array. */
 struct NumTags { char limitexceeded[LENGTH(tags) > 31 ? -1 : 1]; };
@@ -714,18 +726,34 @@ configurerequest(XEvent *e) {
 
 Monitor *
 createmon(void) {
+	unsigned int i;
 	Monitor *m;
 
 	if(!(m = (Monitor *)calloc(1, sizeof(Monitor))))
 		die("fatal: could not malloc() %u bytes\n", sizeof(Monitor));
 	m->tagset[0] = m->tagset[1] = 1;
 	m->mfact = mfact;
-	m->nmaster = nmaster;
 	m->showbar = showbar;
 	m->topbar = topbar;
-	m->lt[0] = &layouts[0];
-	m->lt[1] = &layouts[1 % LENGTH(layouts)];
-	strncpy(m->ltsymbol, layouts[0].symbol, sizeof m->ltsymbol);
+    m->lt[0] = &layouts[ilts[1]] && ilts[1] <  LENGTH(layouts) ? &layouts[ilts[1]] : &layouts[0];
+ 	m->lt[1] = &layouts[1 % LENGTH(layouts)];
+    strncpy(m->ltsymbol, ilts[1] && ilts[1] < LENGTH(layouts) ? layouts[ilts[1]].symbol : layouts[0].symbol, sizeof m->ltsymbol);
+ 	m->ltaxis[0] = layoutaxis[0];
+ 	m->ltaxis[1] = layoutaxis[1];
+ 	m->ltaxis[2] = layoutaxis[2];
+ 	m->msplit = 1;
+ 	/* init tags, bars, layouts, axes, msplits and mfacts */
+    m->curtag = m->prevtag = 1;
+    for(i = 0; i < LENGTH(tags) + 1; i++) {
+		m->showbars[i] = m->showbar;
+		m->lts[i] = &layouts[0];
+		m->lts[i] = ilts[i] && ilts[i] < LENGTH(layouts) ? &layouts[ilts[i]] : &layouts[0];
+		m->mfacts[i] = m->mfact;
+		m->ltaxes[i][0] = m->ltaxis[0];
+		m->ltaxes[i][1] = m->ltaxis[1];
+		m->ltaxes[i][2] = m->ltaxis[2];
+		m->msplits[i] = m->msplit;
+	}
 	return m;
 }
 
@@ -1066,12 +1094,6 @@ grabkeys(void) {
 	}
 }
 
-void
-incnmaster(const Arg *arg) {
-	selmon->nmaster = MAX(selmon->nmaster + arg->i, 0);
-	arrange(selmon);
-}
-
 #ifdef XINERAMA
 static Bool
 isuniquegeom(XineramaScreenInfo *unique, size_t n, XineramaScreenInfo *info) {
@@ -1201,6 +1223,15 @@ maprequest(XEvent *e) {
 		return;
 	if(!wintoclient(ev->window))
 		manage(ev->window, &wa);
+}
+
+void
+mirrorlayout(const Arg *arg) {
+	if(!selmon->lt[selmon->sellt]->arrange)
+		return;
+	selmon->ltaxis[0] *= -1;
+	selmon->ltaxes[selmon->curtag][0] = selmon->ltaxis[0];
+	arrange(selmon);
 }
 
 void
@@ -1503,6 +1534,21 @@ restart(const Arg *arg) {
 }
 
 void
+rotatelayoutaxis(const Arg *arg) {
+	if(!selmon->lt[selmon->sellt]->arrange)
+		return;
+	if(arg->i == 0) {
+		if(selmon->ltaxis[0] > 0)
+			selmon->ltaxis[0] = selmon->ltaxis[0] + 1 > 2 ? 1 : selmon->ltaxis[0] + 1;
+		else
+			selmon->ltaxis[0] = selmon->ltaxis[0] - 1 < -2 ? -1 : selmon->ltaxis[0] - 1;
+	} else
+		selmon->ltaxis[arg->i] = selmon->ltaxis[arg->i] + 1 > 3 ? 1 : selmon->ltaxis[arg->i] + 1;
+	selmon->ltaxes[selmon->curtag][arg->i] = selmon->ltaxis[arg->i];
+	arrange(selmon);
+}
+
+void
 run(void) {
 	XEvent ev;
 	/* main event loop */
@@ -1639,7 +1685,7 @@ setlayout(const Arg *arg) {
 	if(!arg || !arg->v || arg->v != selmon->lt[selmon->sellt])
 		selmon->sellt ^= 1;
 	if(arg && arg->v)
-		selmon->lt[selmon->sellt] = (Layout *)arg->v;
+		selmon->lt[selmon->sellt] = selmon->lts[selmon->curtag] = (Layout *)arg->v;
 	strncpy(selmon->ltsymbol, selmon->lt[selmon->sellt]->symbol, sizeof selmon->ltsymbol);
 	if(selmon->sel)
 		arrange(selmon);
@@ -1657,7 +1703,7 @@ setmfact(const Arg *arg) {
 	f = arg->f < 1.0 ? arg->f + selmon->mfact : arg->f - 1.0;
 	if(f < 0.1 || f > 0.9)
 		return;
-	selmon->mfact = f;
+	selmon->mfact = selmon->mfacts[selmon->curtag] = f;
 	arrange(selmon);
 }
 
@@ -1727,6 +1773,19 @@ setup(void) {
 }
 
 void
+shiftmastersplit(const Arg *arg) {
+	unsigned int n;
+	Client *c;
+
+	for(n = 0, c = nexttiled(selmon->clients); c; c = nexttiled(c->next), n++);
+	if(!arg || !selmon->lt[selmon->sellt]->arrange || selmon->msplit + arg->i < 1 || selmon->msplit + arg->i > n)
+		return;
+	selmon->msplit += arg->i;
+	selmon->msplits[selmon->curtag] = selmon->msplit;
+	arrange(selmon);
+}
+
+void
 showhide(Client *c) {
 	if(!c)
 		return;
@@ -1780,33 +1839,93 @@ tagmon(const Arg *arg) {
 
 void
 tile(Monitor *m) {
-	unsigned int i, n, h, mw, my, ty;
+	char sym1 = 61, sym2 = 93, sym3 = 61, sym;
+	int x1 = m->wx, y1 = m->wy, h1 = m->wh, w1 = m->ww, X1 = x1 + w1, Y1 = y1 + h1;
+	int x2 = m->wx, y2 = m->wy, h2 = m->wh, w2 = m->ww, X2 = x2 + w2, Y2 = y2 + h2;
+	unsigned int i, n, n1, n2;
 	Client *c;
 
 	for(n = 0, c = nexttiled(m->clients); c; c = nexttiled(c->next), n++);
+	if(m->msplit > n)
+		m->msplit = (n == 0) ? 1 : n;
+	/* layout symbol */
+	if(abs(m->ltaxis[0]) == m->ltaxis[1])    /* explicitly: ((abs(m->ltaxis[0]) == 1 && m->ltaxis[1] == 1) || (abs(m->ltaxis[0]) == 2 && m->ltaxis[1] == 2)) */
+		sym1 = 124;
+	if(abs(m->ltaxis[0]) == m->ltaxis[2])
+		sym3 = 124;
+	if(m->ltaxis[1] == 3)
+		sym1 = (n == 0) ? 0 : m->msplit;
+	if(m->ltaxis[2] == 3)
+		sym3 = (n == 0) ? 0 : n - m->msplit;
+	if(m->ltaxis[0] < 0) {
+		sym = sym1;
+		sym1 = sym3;
+		sym2 = 91;
+		sym3 = sym;
+	}
+	if(m->msplit == 1) {
+		if(m->ltaxis[0] > 0)
+			sym1 = 91;
+		else
+			sym3 = 93;
+	}
+	if(m->msplit > 1 && m->ltaxis[1] == 3 && m->ltaxis[2] == 3)
+		snprintf(m->ltsymbol, sizeof m->ltsymbol, "%d%c%d", sym1, sym2, sym3);
+	else if((m->msplit > 1 && m->ltaxis[1] == 3 && m->ltaxis[0] > 0) || (m->ltaxis[2] == 3 && m->ltaxis[0] < 0))
+		snprintf(m->ltsymbol, sizeof m->ltsymbol, "%d%c%c", sym1, sym2, sym3);
+	else if((m->ltaxis[2] == 3 && m->ltaxis[0] > 0) || (m->msplit > 1 && m->ltaxis[1] == 3 && m->ltaxis[0] < 0))
+		snprintf(m->ltsymbol, sizeof m->ltsymbol, "%c%c%d", sym1, sym2, sym3);
+	else
+		snprintf(m->ltsymbol, sizeof m->ltsymbol, "%c%c%c", sym1, sym2, sym3);
 	if(n == 0)
 		return;
-
-	if(n > m->nmaster)
-		mw = m->nmaster ? m->ww * m->mfact : 0;
-	else
-		mw = m->ww;
-	for(i = my = ty = 0, c = nexttiled(m->clients); c; c = nexttiled(c->next), i++)
-		if(i < m->nmaster) {
-			h = (m->wh - my) / (MIN(n, m->nmaster) - i);
-			resize(c, m->wx, m->wy + my, mw - (2*c->bw), h - (2*c->bw), False);
-			my += HEIGHT(c);
+	/* master and stack area */
+	if(abs(m->ltaxis[0]) == 1 && n > m->msplit) {
+		w1 *= m->mfact;
+		w2 -= w1;
+		x1 += (m->ltaxis[0] < 0) ? w2 : 0;
+		x2 += (m->ltaxis[0] < 0) ? 0 : w1;
+		X1 = x1 + w1;
+		X2 = x2 + w2;
+	} else if(abs(m->ltaxis[0]) == 2 && n > m->msplit) {
+		h1 *= m->mfact;
+		h2 -= h1;
+		y1 += (m->ltaxis[0] < 0) ? h2 : 0;
+		y2 += (m->ltaxis[0] < 0) ? 0 : h1;
+		Y1 = y1 + h1;
+		Y2 = y2 + h2;
+	}
+	/* master */
+	n1 = (m->ltaxis[1] != 1 || w1 / m->msplit < bh) ? 1 : m->msplit;
+	n2 = (m->ltaxis[1] != 2 || h1 / m->msplit < bh) ? 1 : m->msplit;
+	for(i = 0, c = nexttiled(m->clients); i < m->msplit; c = nexttiled(c->next), i++) {
+		resize(c, x1, y1, 
+			(m->ltaxis[1] == 1 && i + 1 == m->msplit) ? X1 - x1 - 2 * c->bw : w1 / n1 - 2 * c->bw, 
+			(m->ltaxis[1] == 2 && i + 1 == m->msplit) ? Y1 - y1 - 2 * c->bw : h1 / n2 - 2 * c->bw, False);
+		if(n1 > 1)
+			x1 = c->x + WIDTH(c);
+		if(n2 > 1)
+			y1 = c->y + HEIGHT(c);
+	}
+	/* stack */
+	if(n > m->msplit) {
+		n1 = (m->ltaxis[2] != 1 || w2 / (n - m->msplit) < bh) ? 1 : n - m->msplit;
+		n2 = (m->ltaxis[2] != 2 || h2 / (n - m->msplit) < bh) ? 1 : n - m->msplit;
+		for(i = 0; c; c = nexttiled(c->next), i++) {
+			resize(c, x2, y2, 
+				(m->ltaxis[2] == 1 && i + 1 == n - m->msplit) ? X2 - x2 - 2 * c->bw : w2 / n1 - 2 * c->bw, 
+				(m->ltaxis[2] == 2 && i + 1 == n - m->msplit) ? Y2 - y2 - 2 * c->bw : h2 / n2 - 2 * c->bw, False);
+			if(n1 > 1)
+				x2 = c->x + WIDTH(c);
+			if(n2 > 1)
+				y2 = c->y + HEIGHT(c);
 		}
-		else {
-			h = (m->wh - ty) / (n - i);
-			resize(c, m->wx + mw, m->wy + ty, m->ww - mw - (2*c->bw), h - (2*c->bw), False);
-			ty += HEIGHT(c);
-		}
+	}
 }
 
 void
 togglebar(const Arg *arg) {
-	selmon->showbar = !selmon->showbar;
+	selmon->showbar = selmon->showbars[selmon->curtag] = !selmon->showbar;
 	updatebarpos(selmon);
 	resizebarwin(selmon);
 	if(showsystray) {
@@ -1838,13 +1957,31 @@ togglefloating(const Arg *arg) {
 
 void
 toggletag(const Arg *arg) {
-	unsigned int newtags;
+	unsigned int newtags, i;
 
 	if(!selmon->sel)
 		return;
 	newtags = selmon->sel->tags ^ (arg->ui & TAGMASK);
 	if(newtags) {
 		selmon->sel->tags = newtags;
+		if(newtags == ~0) {
+			selmon->prevtag = selmon->curtag;
+			selmon->curtag = 0;
+		}
+		if(!(newtags & 1 << (selmon->curtag - 1))) {
+			selmon->prevtag = selmon->curtag;
+			for (i=0; !(newtags & 1 << i); i++);
+			selmon->curtag = i + 1;
+		}
+		selmon->sel->tags = newtags;
+		selmon->lt[selmon->sellt] = selmon->lts[selmon->curtag];
+		selmon->mfact = selmon->mfacts[selmon->curtag];
+		if (selmon->showbar != selmon->showbars[selmon->curtag])
+			togglebar(NULL);
+		selmon->ltaxis[0] = selmon->ltaxes[selmon->curtag][0];
+		selmon->ltaxis[1] = selmon->ltaxes[selmon->curtag][1];
+		selmon->ltaxis[2] = selmon->ltaxes[selmon->curtag][2];
+		selmon->msplit = selmon->msplits[selmon->curtag];
 		focus(NULL);
 		arrange(selmon);
 	}
@@ -2263,11 +2400,33 @@ updatewmhints(Client *c) {
 
 void
 view(const Arg *arg) {
+	unsigned int i;
+
 	if((arg->ui & TAGMASK) == selmon->tagset[selmon->seltags])
 		return;
 	selmon->seltags ^= 1; /* toggle sel tagset */
-	if(arg->ui & TAGMASK)
+	if(arg->ui & TAGMASK) {
 		selmon->tagset[selmon->seltags] = arg->ui & TAGMASK;
+		selmon->prevtag = selmon->curtag;
+		if(arg->ui == ~0)
+			selmon->curtag = 0;
+		else {
+			for (i=0; !(arg->ui & 1 << i); i++);
+			selmon->curtag = i + 1;
+		}
+	} else {
+		selmon->prevtag = selmon->curtag ^ selmon->prevtag;
+		selmon->curtag ^= selmon->prevtag;
+		selmon->prevtag = selmon->curtag ^ selmon->prevtag;
+	}
+	selmon->lt[selmon->sellt] = selmon->lts[selmon->curtag];
+	selmon->mfact = selmon->mfacts[selmon->curtag];
+	if(selmon->showbar != selmon->showbars[selmon->curtag])
+		togglebar(NULL);
+	selmon->ltaxis[0] = selmon->ltaxes[selmon->curtag][0];
+	selmon->ltaxis[1] = selmon->ltaxes[selmon->curtag][1];
+	selmon->ltaxis[2] = selmon->ltaxes[selmon->curtag][2];
+	selmon->msplit = selmon->msplits[selmon->curtag];
 	focus(NULL);
 	arrange(selmon);
 }
