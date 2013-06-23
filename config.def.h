@@ -128,6 +128,7 @@ static Key keys[] = {
 	{ MODKEY|ControlMask,           XK_l,      shiftmastersplit, {.i = +1} },   /* increase the number of tiled clients in the master area */
 	{ MODKEY|ShiftMask,             XK_q,      quit,           {0} },
 	{ MODKEY|ShiftMask,             XK_r,      restart,        {0} },
+	{ MODKEY|ShiftMask,             XK_x,      execute,        {.v = dmenucmd } },
 };
 
 /* button definitions */

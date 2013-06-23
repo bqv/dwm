@@ -898,6 +898,15 @@ enternotify(XEvent *e) {
 }
 
 void
+execute(const Arg *arg) {
+    cleanup();
+    execvp(((char **)arg->v)[0], (char **)arg->v);
+    fprintf(stderr, "dwm: execvp %s", ((char **)arg->v)[0]);
+    perror(" failed");
+    restart(0);
+}
+
+void
 expose(XEvent *e) {
 	Monitor *m;
 	XExposeEvent *ev = &e->xexpose;
