@@ -548,6 +548,7 @@ cleanup(void) {
 	XSync(dpy, False);
 	XSetInputFocus(dpy, PointerRoot, RevertToPointerRoot, CurrentTime);
 	XDeleteProperty(dpy, root, netatom[NetActiveWindow]);
+    deinit();
 }
 
 void
@@ -2687,7 +2688,6 @@ main(int argc, char *argv[]) {
 	scan();
 	run();
 	cleanup();
-    deinit();
 	XCloseDisplay(dpy);
 	return EXIT_SUCCESS;
 }
