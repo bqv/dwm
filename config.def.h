@@ -42,12 +42,15 @@ static const int layoutaxis[] = {
 	2,    /* stack axis:  1 = x (from left to right), 2 = y (from top to bottom), 3 = z (monocle) */
 };
 
+#include "fibonacci.c"
 static const Layout layouts[] = {
 	/* symbol     arrange function */
 	{ "[]=",      tile },    /* first entry is default */
 	{ "><>",      NULL },    /* no layout function means floating behavior */
 	{ "[M]",      monocle },
 	{ "+++",      grid },
+	{ "[@]",      spiral },
+	{ "[\\]",     dwindle },
 };
 
 /* key definitions */
